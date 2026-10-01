@@ -36,6 +36,7 @@ COPY zefoy_favorites.py .
 
 ENV PORT=10000
 ENV PYTHONUNBUFFERED=1
+EXPOSE 10000
 
 # Dùng xvfb-run để giả lập màn hình thật cho Chromium chạy không bị chặn bot
 CMD ["xvfb-run", "--auto-servernum", "--server-args=-screen 0 1280x900x24", "python3", "app.py"]
