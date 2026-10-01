@@ -72,7 +72,8 @@ class SimpleWebServer(BaseHTTPRequestHandler):
         <h2>⚡ Zefoy Favorites Booster (24/7 Cloud)</h2>
         <p><b>Target:</b> <a href="{TARGET_URL}" target="_blank" style="color: #79c0ff;">{TARGET_URL}</a></p>
         <p><b>Trạng thái:</b> <span class="badge">{STATUS['current_status']}</span></p>
-        <p><b>Tổng lượt buff thành công:</b> <span style="font-size: 20px; font-weight: bold; color: #ff7b72;">{STATUS['total_sent']}</span></p>
+        <p><b>Thời gian Cooldown còn lại:</b> <span style="font-size: 22px; font-weight: bold; color: #f0883e;">⏳ {STATUS['cooldown']}</span></p>
+        <p><b>Tổng lượt buff thành công:</b> <span style="font-size: 22px; font-weight: bold; color: #ff7b72;">{STATUS['total_sent']}</span></p>
         <p><b>Uptime:</b> {uptime}s | <b>Cập nhật lần cuối:</b> {STATUS['last_update']}</p>
         <h3>Nhật ký hoạt động (Tự refresh 5s):</h3>
         <div class="log-box">{logs_html}</div>
@@ -222,16 +223,39 @@ class ZefoyFavoritesBot:
                     # Cooldown
                     STATUS["current_status"] = "Đang chờ Cooldown..."
                     log("Đang theo dõi Cooldown...")
-                    for _ in range(70):
-                        await asyncio.sleep(5)
-                        text = await page.evaluate("() => document.querySelector('.t-favorites-menu')?.innerText || ''")
-                        m = re.search(r'(\d+)\s*m\s*(\d+)\s*s', text) or re.search(r'(\d{1,2}):(\d{2})', text) or re.search(r'(\d+)\s*s', text)
-                        if m:
-                            STATUS["cooldown"] = m.group(0)
+                    empty_count = 0
+                    last_logged_time = ""
+                    for c_step in range(90):
+                        await asyncio.sleep(3)
+                        text = await page.evaluate("() => document.querySelector('.t-favorites-menu')?.innerText || document.body.innerText || ''")
+                        
+                        match_min_sec = re.search(r'(\d+)\s*m(?:inutes?)?\s*\(?s?\)?\s*(\d+)\s*s(?:econds?)?', text, re.I)
+                        match_sec_only = re.search(r'(\d+)\s*s(?:econds?)?', text, re.I)
+                        match_colon = re.search(r'(\d{1,2})\s*:\s*(\d{2})', text)
+
+                        time_str = None
+                        if match_min_sec:
+                            time_str = f"{match_min_sec.group(1)}m {match_min_sec.group(2)}s"
+                        elif match_colon:
+                            time_str = f"{match_colon.group(1)}:{match_colon.group(2)}"
+                        elif match_sec_only and any(w in text.lower() for w in ['wait', 'seconds', 'next submit']):
+                            time_str = f"{match_sec_only.group(1)}s"
+
+                        if time_str:
+                            STATUS["cooldown"] = time_str
+                            STATUS["current_status"] = f"Đang chờ Cooldown ({time_str})"
+                            empty_count = 0
+                            # Log mỗi 20-30 giây để không làm tràn khung log
+                            if c_step % 6 == 0 and time_str != last_logged_time:
+                                log(f"⏳ Cooldown còn: {time_str}")
+                                last_logged_time = time_str
                         else:
-                            STATUS["cooldown"] = "0s"
-                            log("Hết thời gian Cooldown! Sẵn sàng cho lượt mới.")
-                            break
+                            empty_count += 1
+                            if empty_count >= 2:
+                                STATUS["cooldown"] = "0s (Sẵn sàng)"
+                                STATUS["current_status"] = "Sẵn sàng cho lượt tiếp theo"
+                                log("✅ Hết thời gian Cooldown! Bắt đầu lượt buff mới.")
+                                break
 
                 except Exception as e:
                     log(f"Lỗi: {e}")
